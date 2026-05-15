@@ -1,4 +1,10 @@
-# agora-hub-web — Project Context for Claude
+# agora-hub-web — Landing Page & Docs
+
+## Repo boundary — IMPORTANTE
+Questo repo contiene **solo** landing page e documentazione pubblica. Se l'utente chiede qualcosa che riguarda il **widget**, l'**admin panel**, **Supabase**, **Stripe** o il **backend**, rispondi che va fatto nell'altro repo (`agora-hub-admin`) e non toccare nulla qui.
+
+Appartiene a questo repo: landing page marketing, docs pubbliche (Nuxt Content), componenti UI statici.
+NON appartiene a questo repo: widget IIFE, admin panel, Supabase migrations, edge functions, billing logic.
 
 ## What this is
 Landing page commerciale e documentazione pubblica di Agora Games.
