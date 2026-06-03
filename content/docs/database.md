@@ -146,6 +146,7 @@ supabase db push
 | `009_billing.sql` | Billing system: billing_plans, brand_subscriptions, visit_packages, brand_visit_credits, billing_events; RLS policies; seed data for plans and packages |
 | `010_billing_rpc.sql` | Atomic RPC functions: `check_and_consume_brand_session` (widget gate + credit debit, callable by anon), `increment_brand_credits` (webhook top-up) |
 | `011_newsletter.sql` | Newsletter integration: `brand_klaviyo_config` (per-brand Klaviyo API key, server-side only), `newsletter_signups` (audit log), RLS policies |
+| `037_analytics_bounce_rate.sql` | Analytics RPC `get_brand_bounce_rate(p_brand_id)` → `ready_sessions` / `started_sessions` from `session_events` (game_ready vs game_start by `properties->>'brand_id'`, excludes editor placement); powers the widget bounce-rate metric |
 
 ## Config JSONB structure (`brand_games.config`)
 
