@@ -123,6 +123,25 @@ newsletter_signups
   email            TEXT
   klaviyo_synced   BOOL          — true if Klaviyo API call succeeded
   created_at       TIMESTAMPTZ
+
+── Preview & anti-abuse ────────────────────────────────────────────────────────
+
+game_preview_links               — shareable, expiring no-login game previews
+  token         TEXT PK          — random; used in the /p/:token public URL
+  brand_id      UUID FK → brands.id
+  game_id       UUID FK → brand_games.id
+  expires_at    TIMESTAMPTZ nullable  — null = never expires
+  created_at    TIMESTAMPTZ
+  — RLS: brand members manage their own; public reads go through the
+    `preview-config` Edge Function (service role), billing bypassed.
+
+widget_ip_plays                  — per-IP play counter for the anti-abuse limit
+  id            BIGINT PK (identity)
+  brand_id      UUID FK → brands.id
+  game_id       UUID FK → brand_games.id
+  ip_hash       TEXT             — salted SHA-256 of the visitor IP (never raw)
+  played_at     TIMESTAMPTZ
+  — RLS enabled, no policies: only the service role (Edge Function) touches it.
 ```
 
 ## Migrations
@@ -147,6 +166,8 @@ supabase db push
 | `010_billing_rpc.sql` | Atomic RPC functions: `check_and_consume_brand_session` (widget gate + credit debit, callable by anon), `increment_brand_credits` (webhook top-up) |
 | `011_newsletter.sql` | Newsletter integration: `brand_klaviyo_config` (per-brand Klaviyo API key, server-side only), `newsletter_signups` (audit log), RLS policies |
 | `037_analytics_bounce_rate.sql` | Analytics RPC `get_brand_bounce_rate(p_brand_id)` → `ready_sessions` / `started_sessions` from `session_events` (game_ready vs game_start by `properties->>'brand_id'`, excludes editor placement); powers the widget bounce-rate metric |
+| `038_game_preview_links.sql` | `game_preview_links` table (shareable, expiring no-login preview links) + RLS scoped to brand members. Public resolution via the `preview-config` Edge Function (E-06) |
+| `039_ip_play_limit.sql` | `widget_ip_plays` table + atomic RPC `check_and_record_ip_play(p_brand_id, p_game_id, p_ip_hash, p_max, p_window_hours)` for the per-IP play limit; EXECUTE restricted to the service role. Enforced by the `check-ip-limit` Edge Function (E-24) |
 
 ## Config JSONB structure (`brand_games.config`)
 
@@ -157,7 +178,10 @@ supabase db push
     "gameDuration": 30,
     "maxMisses": 5,
     "items": ["🎁", "⭐"],
-    "gameMode": "timed"
+    "gameMode": "timed",
+    "maxPlaysPerPeriod": null,
+    "playPeriodHours": 24,
+    "maxPlaysPerIp": null
   },
   "content": {
     "title": "...",
@@ -184,10 +208,32 @@ supabase db push
     "gravity": 0.75,
     "jumpForce": 13.5,
     "hasSlide": true,
-    "hasDoubleJump": false
+    "hasDoubleJump": false,
+    "obstacleImageUrls": ["https://..."],
+    "obstacleWeights": [3]
+  },
+  "schedule": {
+    "activeFrom": "2026-11-29T09:00",
+    "activeUntil": "2026-12-02T23:59",
+    "weekly": { "mon": [9, 22], "sat": null }
+  },
+  "targeting": {
+    "minCartValue": 50,
+    "utmSources": ["newsletter", "instagram"]
   }
 }
 ```
+
+**Optional config blocks** (editor features, all stored in `brand_games.config`):
+
+| Block | Purpose |
+|-------|---------|
+| `schedule` | Activation window (`activeFrom`/`activeUntil`) + `weekly` per-day active hours (`[startHour, endHour]` or `null` = closed). Enforced widget-side before the billing gate. |
+| `targeting` | Show the widget only when the host cart total ≥ `minCartValue` and/or `utm_source` ∈ `utmSources`. Evaluated in the widget entry. |
+| `gameplay.maxPlaysPerIp` | Per-IP play cap (anti-abuse), enforced via the `check-ip-limit` Edge Function over `playPeriodHours`. |
+| `runnerConfig.obstacleWeights` | Spawn weight (1–5) per obstacle image, index-aligned with `obstacleImageUrls`; missing = 3. |
+| `coupons` | Tier-based rewards (`[{ threshold, code, description }]`). |
+| `configB` | A/B variant B overrides (partial `GameTypeConfig`). |
 
 ## Common operations in Supabase dashboard
 
